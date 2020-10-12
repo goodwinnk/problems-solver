@@ -7,7 +7,7 @@ class AbstractDbWriter(ABC):
     def update_channels_states(self, channels_states: dict):
         """
         {
-            "channel-id": {
+            "channel_id": {
                 "name": str,
                 "id": str,
                 "following": bool,

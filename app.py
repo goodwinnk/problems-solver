@@ -20,13 +20,17 @@ app = AsyncApp(
 
 
 @app.action("collect-data")
-async def button_clicked(ack, say, client):
+async def button_clicked(ack, say, client, logger):
     await ack()
-    await say('Sorry. This functionality is in develop')
-    if data_collector.get_following_channels_id():
-        await data_collector.collect_messages(client)
+    if await data_collector.get_following_channels_ids():
+        if not data_collector.collecting_running:
+            await say('Start collection messages')
+            await data_collector.collect_messages(client, logger)
+            await say('New messages from following channels was stored.')
+        else:
+            await say('The scanning process is already runned')
     else:
-        say('Please choose the channels')
+        await say('Please choose the channels')
 
 
 @app.action("following-channel_chosen")
@@ -43,18 +47,18 @@ async def collect_messages(ack, say, client: AsyncWebClient, logger):
         if not len(result.get('channels')):
             await say('No channels found')
         else:
-            following = await data_collector.get_following_channels_id()
+            following = await data_collector.get_following_channels_ids()
             blocks = get_channel_choosing_block(result.get('channels'), following)
             await say(blocks=blocks)
     else:
         await say(f'Something goes wrong: {str(result)}')
-        # logger.log
+        logger.error()
 
 
 @app.message("")
 async def message_handler(message, say, client):
     await say(f"Hey there <@{message['user']}>!")
-    print(message)
+    await data_collector.add_message(message)
 
 
 @app.event({"type": "message", "subtype": "message_deleted"})

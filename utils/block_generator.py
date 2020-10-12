@@ -4,15 +4,18 @@ def get_channel_choosing_block(raw_channels: list, following_ids: list) -> list:
     :param channels: list of pairs: ( channel_id, channel_name )
     :return: list: Block kit interpretation of channel choosing
     """
-    blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": "Choose the channels which you want to store:"},
-               "accessory": {"type": "checkboxes", "options": [], "action_id": "following-channel_chosen"}},
-              {"type": "actions", "elements": [
-                  {"type": "button", "text": {"type": "plain_text", "text": "Run message sniffer", "emoji": False},
-                   "value": "click_me_123", "style": "primary", "action_id": "collect-data"}]
-               }
-              ]
+    blocks = [{
+        "type": "section", "text": {
+            "type": "mrkdwn", "text": "The bot is subscribed to these channels, choose which ones to follow:"
+        },
+        "accessory": {"type": "checkboxes", "options": [], "action_id": "following-channel_chosen"}},
+        {"type": "actions", "elements": [
+            {"type": "button", "text": {"type": "plain_text", "text": "Run message sniffer", "emoji": False},
+             "value": "click_me_123", "style": "primary", "action_id": "collect-data"}]
+         }
+    ]
     for channel in raw_channels:
-        if not channel['is_archived'] and not channel['is_private']:
+        if channel['is_member'] and not channel['is_private']:
             option = {
                 "text": {
                     "type": "mrkdwn",
