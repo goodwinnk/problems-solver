@@ -9,7 +9,6 @@ from data_collector import DataCollector
 from mongo_db_writer import MongoDbWriter
 from app_home import AppHome
 
-
 load_dotenv('secret.env')
 logging.basicConfig(level=logging.INFO)
 
@@ -30,10 +29,10 @@ async def draw_home(client: AsyncWebClient, event, logger):
 async def button_clicked(ack, body, client, logger):
     await ack()
     if await data_collector.get_following_channels_ids():
-        data_collector.collecting_running = True
+        data_collector.collecting_running = True  # Do it before collecting because we need to draw new interface
         await client.views_update(view_id=body["view"]["id"], hash=body["view"]["hash"],
                                   view=await app_home.get_view(client, logger))
-        await data_collector.collect_messages(client, logger)
+        await data_collector.collect_messages(client, logger)  # A lot of time is wasted here
     await client.views_publish(user_id=body['user']['id'], view=await app_home.get_view(client, logger))
 
 

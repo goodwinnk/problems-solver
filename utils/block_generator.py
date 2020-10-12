@@ -1,11 +1,12 @@
 def get_channel_choosing_block(subscribed_channels: list, followed_channels: list) -> list:
     """
     filtering channel list and product Block kit Form
-    :param channels: list of pairs: ( channel_id, channel_name )
+    :param subscribed_channels: list of subscribed channels
+    :param followed_channels: list of following channels
     :return: list: Block kit interpretation of channel choosing
     """
     blocks = [{
-        **get_text("The bot is subscribed to these channels, choose which ones to follow:"),
+        **text_block("The bot is subscribed to these channels, choose which ones to follow:"),
         "accessory": {"type": "checkboxes", "options": [], "action_id": "following-channel_chosen"}}
     ]
     for channel_name, channel_id in subscribed_channels:
@@ -25,7 +26,7 @@ def get_channel_choosing_block(subscribed_channels: list, followed_channels: lis
     return blocks
 
 
-def get_text(text: str):
+def text_block(text: str):
     return {
         "type": "section",
         "text": {
@@ -35,7 +36,7 @@ def get_text(text: str):
     }
 
 
-def get_button(text: str, value: str, action_id: str):
+def button_block(text: str, value: str, action_id: str):
     return {
         "type": "actions",
         "elements": [{
