@@ -7,7 +7,7 @@ from utils.abstract_db_writer import AbstractDbWriter
 async def collect_messages(channel_id: str, start_time: float, client: AsyncWebClient, logger):
     cursor = None
     while True:
-        payload = {"channel": channel_id, "oldest": str(start_time), "limit": 1}  # TODO: limit = ~100-1000~
+        payload = {"channel": channel_id, "oldest": str(start_time), "limit": 1000}
         if cursor:
             payload['cursor'] = cursor
         try:
@@ -32,6 +32,7 @@ class DataCollector:
         self.db_writer = db_writer
         self.following_channel_ids = []  # Cached
         self.collecting_running = False
+        self.data_collected = False
 
     async def collect_messages(self, client: AsyncWebClient, logger):
         self.collecting_running = True
@@ -42,6 +43,7 @@ class DataCollector:
             async for messages in msg_generator:
                 self.db_writer.add_messages(messages, channel_id)
             logger.info(f'Channel ID: {channel_id} was scanned')
+        self.data_collected = True
         self.collecting_running = False
 
     async def set_channels(self, checkbox_action: dict):
