@@ -29,7 +29,41 @@ Or if you install it directly into your project directory:
 After this step you will see the domain that ngrok service is providing you, 
 something like `https://2be3ac1b2fed.ngrok.io`, remind this 
 
-To be continued:
-* Connect your uri with app  
-* Install and run mongodb
+Paste 'https://2be3ac1b2fed.ngrok.io/slack/events`' in  
+YourApp -> Basic Information -> Add features and functionality:
+
+    * Interactive components -> Interactivity -> Request URL
+    * Event Subscriptions -> Request URL
+    * Also turn on 'Enable Events' check.
+
+Give permissions to the app,   
+YourApp -> Basic Information -> Permissions:
+
+    * app_mentions:read
+    * channels:history
+    * channels:read
+    * chat:write
+    * im:history
+    * groups:history
+    * links:read
+    * mpim:history
+    
+Install your app to your workspace:  
+YourApp -> Basic Information -> Install your app to your workspace -> Install
+
+[Install MongoDB](https://docs.mongodb.com/manual/installation/)
+
+Run MongoDB:
+
+```
+sudo systemctl start mongo
+sudo systemctl status mongo # Check is it running
+
+```
+
+Run app:
+```
+cd problems-solver
+python3 app.py
+```
 

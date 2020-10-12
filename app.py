@@ -1,5 +1,5 @@
 import os
-
+import logging
 from dotenv import load_dotenv
 
 from slack_bolt.async_app import AsyncApp
@@ -9,7 +9,9 @@ from data_collector import DataCollector
 from mongo_db_writer import MongoDbWriter
 from app_home import AppHome
 
+
 load_dotenv('secret.env')
+logging.basicConfig(level=logging.INFO)
 
 data_collector = DataCollector(MongoDbWriter())
 app_home = AppHome(data_collector)
@@ -44,25 +46,24 @@ async def choose_channel(ack, body, client, payload, logger):
 
 
 @app.message("")
-async def message_handler(message, say, client):
-    await say(f"Hey there <@{message['user']}>!")
+async def message_handler(message, logger):
     await data_collector.add_message(message)
+    logger.info(message)
+
 
 @app.event({"type": "message", "subtype": "file_share"})
-async def msg_deleted_handler(message, say):
-    print(message)
-    await say("I don't see what you attached")
+async def msg_deleted_handler(message, logger):
+    logger.info(message)
+
 
 @app.event({"type": "message", "subtype": "message_deleted"})
-async def msg_deleted_handler(message, say):
-    print(message)
-    await say('Oh, message was deleted.')
+async def msg_deleted_handler(message, logger):
+    logger.info(message)
 
 
 @app.event({"type": "message", "subtype": "message_changed"})
-async def msg_changed_handler(message, say):
-    print(message)
-    await say('The message was changed.')
+async def msg_changed_handler(message, logger):
+    logger.info(message)
 
 
 if __name__ == "__main__":

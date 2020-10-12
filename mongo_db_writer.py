@@ -37,5 +37,5 @@ class MongoDbWriter(AbstractDbWriter):
             try:
                 value = cursor.next()['ts']
             except StopIteration:
-                print(f'Chanel {channel_id} is empty')
+                pass
         return value
