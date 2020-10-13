@@ -67,3 +67,9 @@ cd problems-solver
 python3 app.py
 ```
 
+Dump data from db:
+```
+python3 extracter.py
+```
+The result will be in extracted foled.
+
