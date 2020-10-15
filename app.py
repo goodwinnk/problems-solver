@@ -9,6 +9,9 @@ from data_collector import DataCollector
 from mongo_db_writer import MongoDbWriter
 from app_home import AppHome
 
+from utils.message_filters import *
+from pprint import pprint
+
 load_dotenv('secret.env')
 logging.basicConfig(level=logging.INFO)
 
@@ -45,8 +48,12 @@ async def choose_channel(ack, body, client, payload, logger):
 
 
 @app.message("")
-async def message_handler(message, logger):
+async def message_handler(client: AsyncWebClient, event, message, logger):
     await data_collector.add_message(message)
+    if answer_trigger(event):
+        await client.chat_postMessage(channel=event['channel'],
+                                      thread_ts=get_thread_ts(event),
+                                      text='Answer in thread')
     logger.info(message)
 
 
