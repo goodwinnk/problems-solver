@@ -10,13 +10,13 @@ from mongo_db_writer import MongoDbWriter
 from app_home import AppHome
 
 from utils.message_filters import *
-from pprint import pprint
 
 load_dotenv('secret.env')
 logging.basicConfig(level=logging.INFO)
 
 data_collector = DataCollector(MongoDbWriter())
 app_home = AppHome(data_collector)
+
 app = AsyncApp(
     token=os.environ.get("SLACK_BOT_TOKEN"),
     signing_secret=os.environ.get("SLACK_SIGNING_SECRET")
@@ -49,8 +49,12 @@ async def choose_channel(ack, body, client, payload, logger):
 
 @app.message("")
 async def message_handler(client: AsyncWebClient, event, message, logger):
+    if message_contain_russian(message):
+        logger.info('Contain russian symbols. Translation required')
+        message = translate_message(message)
+        logger.info('Was translated (Actually no)')
     await data_collector.add_message(message)
-    if answer_trigger(event):
+    if answer_trigger(message):
         await client.chat_postMessage(channel=event['channel'],
                                       thread_ts=get_thread_ts(event),
                                       text='Answer in thread')
@@ -63,7 +67,7 @@ async def msg_deleted_handler(message, logger):
 
 
 @app.event({"type": "message", "subtype": "message_deleted"})
-async def msg_deleted_handler(message, logger):
+async def msg_file_handler(message, logger):
     logger.info(message)
 
 

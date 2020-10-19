@@ -38,10 +38,11 @@ class MongoDbWriter(AbstractDbWriter):
                 parent_i = i  # client.conversation_replies also returns parent
         if parent_i != -1:
             messages.pop(parent_i)
-        self.db[channel_id].find_one_and_update(
-            {"ts": float(parent_ts)},
-            {"$addToSet": {"thread": messages}}
-        )
+        for message in messages:
+            self.db[channel_id].find_one_and_update(
+                {"ts": float(parent_ts)},
+                {"$addToSet": {"thread": message}}
+            )
 
     def get_latest_timestamp(self, channel_id: str) -> float:
         value = self.channels_states[channel_id]['last_update'] if channel_id in self.channels_states else 0

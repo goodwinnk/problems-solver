@@ -2,6 +2,7 @@ import asyncio
 from slack_sdk.errors import SlackApiError
 from slack_sdk.web.async_client import AsyncWebClient
 from utils.abstract_db_writer import AbstractDbWriter
+from utils.message_filters import message_contain_russian, translate_message
 
 
 async def collect_messages(channel_id: str, start_time: float, method, logger, **kwargs):
@@ -33,6 +34,14 @@ async def collect_messages(channel_id: str, start_time: float, method, logger, *
             break  # DO-WHILE
 
 
+def translate_messages(messages: list):
+    for i in range(len(messages)):
+        if message_contain_russian(messages[i]):
+            messages[i] = translate_message(messages[i])
+            print(messages[i])
+    return messages
+
+
 class DataCollector:
     def __init__(self, db_writer: AbstractDbWriter):
         self.db_writer = db_writer
@@ -47,6 +56,7 @@ class DataCollector:
             last_update = self.db_writer.get_latest_timestamp(channel_id) + 1e-6  # web_api includes oldest value
             msg_generator = collect_messages(channel_id, last_update, client.conversations_history, logger)
             async for messages in msg_generator:
+                translate_messages(messages)
                 self.db_writer.add_parent_messages(messages, channel_id)
                 for message in messages:
                     if 'thread_ts' in message:
