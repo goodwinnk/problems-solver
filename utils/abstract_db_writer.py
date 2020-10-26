@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from datetime import datetime
 
 
 class AbstractDbWriter(ABC):
@@ -22,7 +21,11 @@ class AbstractDbWriter(ABC):
         pass
 
     @abstractmethod
-    def add_messages(self, messages: list, channel_id: str):
+    def add_parent_messages(self, messages: list, channel_id: str):
+        pass
+
+    @abstractmethod
+    def add_child_messages(self, messages: list, channel_id: str, parent_ts: str):
         pass
 
     @abstractmethod

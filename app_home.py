@@ -1,7 +1,7 @@
 from data_collector import DataCollector
 from slack_sdk.web.async_client import AsyncWebClient
 
-from utils.block_generator import get_channel_choosing_block, get_button, get_text
+from utils.block_generator import get_channel_choosing_block, button_block, text_block
 
 
 class AppHome:
@@ -16,15 +16,15 @@ class AppHome:
         if subscribed_channels:
             blocks = get_channel_choosing_block(subscribed_channels, following_channels)
             if not following_channels:
-                blocks.append(get_text("Please, choose at least one channel"))
+                blocks.append(text_block("Please, choose at least one channel"))
             if not is_running or self.data_collector.data_collected:
                 if self.data_collector.data_collected:
-                    blocks.append(get_text("The data was collected"))
-                blocks.append(get_button("Run message sniffer", "click", "collect-data"))
+                    blocks.append(text_block("The data was collected"))
+                blocks.append(button_block("Run message sniffer", "click", "collect-data"))
             else:
-                blocks.append(get_text("The scanning process is runned" ))
+                blocks.append(text_block("The scanning process is runned"))
         else:
-            blocks.append(get_text("The bot is not subscribed to any channel"))
+            blocks.append(text_block("The bot is not subscribed to any channel"))
         return {"type": "home", "blocks": blocks}
 
     async def get_channels_list(self, client: AsyncWebClient, logger):

@@ -1,17 +1,24 @@
 import asyncio
-from slack_sdk.web.async_client import AsyncWebClient
 from slack_sdk.errors import SlackApiError
+from slack_sdk.web.async_client import AsyncWebClient
 from utils.abstract_db_writer import AbstractDbWriter
+from utils.message_filters import message_contain_russian, translate_message
 
 
-async def collect_messages(channel_id: str, start_time: float, client: AsyncWebClient, logger):
+async def collect_messages(channel_id: str, start_time: float, method, logger, **kwargs):
+    """
+        method: method to call:
+            client.conversation_history
+            client.conversations.replies
+        kwargs: method args
+    """
     cursor = None
     while True:
-        payload = {"channel": channel_id, "oldest": str(start_time), "limit": 1000}
-        if cursor:
+        payload = {"channel": channel_id, "oldest": str(start_time), "limit": 1000, **kwargs}
+        if cursor:  # using pagination
             payload['cursor'] = cursor
         try:
-            data = await client.conversations_history(**payload)
+            data = await method(**payload)
             raw_data = data.data
             if raw_data['messages']:
                 yield raw_data['messages']
@@ -27,6 +34,14 @@ async def collect_messages(channel_id: str, start_time: float, client: AsyncWebC
             break  # DO-WHILE
 
 
+def translate_messages(messages: list):
+    for i in range(len(messages)):
+        if message_contain_russian(messages[i]):
+            messages[i] = translate_message(messages[i])
+            print(messages[i])
+    return messages
+
+
 class DataCollector:
     def __init__(self, db_writer: AbstractDbWriter):
         self.db_writer = db_writer
@@ -39,9 +54,17 @@ class DataCollector:
         self.following_channel_ids = await self.get_following_channels_ids()
         for channel_id in self.following_channel_ids:
             last_update = self.db_writer.get_latest_timestamp(channel_id) + 1e-6  # web_api includes oldest value
-            msg_generator = collect_messages(channel_id, last_update, client, logger)
+            msg_generator = collect_messages(channel_id, last_update, client.conversations_history, logger)
             async for messages in msg_generator:
-                self.db_writer.add_messages(messages, channel_id)
+                translate_messages(messages)
+                self.db_writer.add_parent_messages(messages, channel_id)
+                for message in messages:
+                    if 'thread_ts' in message:
+                        chd_message_generator = collect_messages(channel_id, last_update,
+                                                                 client.conversations_replies, logger,
+                                                                 ts=message['thread_ts'])
+                        async for child_messages in chd_message_generator:
+                            self.db_writer.add_child_messages(child_messages, channel_id, message['thread_ts'])
             logger.info(f'Channel ID: {channel_id} was scanned')
         self.data_collected = True
         self.collecting_running = False
@@ -49,6 +72,10 @@ class DataCollector:
     async def set_channels(self, checkbox_action: dict):
         channels = dict(
             (checkbox['value'], checkbox['text']['text']) for checkbox in checkbox_action['selected_options'])
+        old_following = await self.get_following_channels_ids()
+        for channel in channels.keys():
+            if channel not in old_following:
+                self.data_collected = False
         self.following_channel_ids = list(channels.keys())
         current_states = self.db_writer.get_channels_states()
         for channel_id, channel_name in channels.items():
@@ -70,4 +97,7 @@ class DataCollector:
 
     async def add_message(self, message):
         if message['channel'] in await self.get_following_channels_ids():
-            self.db_writer.add_messages([message], message['channel'])
+            if 'thread_ts' in message:
+                self.db_writer.add_child_messages([message], message['channel'], message['thread_ts'])
+            else:
+                self.db_writer.add_parent_messages([message], message['channel'])
