@@ -7,13 +7,14 @@ from nlp.message_processing import text_contain_language
 
 load_dotenv('../secret.env')
 translate_client = translate.Client()
-
-all_counter = 159349 + 161272
+# TODO: remove limits
+all_counter = 484928
 
 
 def translate(text: str) -> str:
     global all_counter
     all_counter += len(text)
+    print(all_counter)
     if all_counter >= 490000:
         print('limited')
         exit(1)

@@ -5,7 +5,7 @@ from collections import Counter
 
 rus_letters = 'абвгдеёжзийклмнопрстуфхцчшщьыъэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЬЫЪЭЮЯ'
 eng_letters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
-all_letters = rus_letters + eng_letters
+all_letters = rus_letters + eng_letters + '0123456789'
 
 
 def text_contain_language(text: str, russian=True) -> bool:
@@ -199,7 +199,7 @@ def frequency_analysis(messages, stemmer, stopwords: set):
     for message in messages:
         stemmed_tokens = []
         for token in extract_tokens(parse_text(message['text'])):
-            if token not in stopwords:
+            if token not in stopwords and stemmer.stem(token) not in stopwords:
                 stemmed_tokens.append(stemmer.stem(token))
         result.update(stemmed_tokens)
     return result
