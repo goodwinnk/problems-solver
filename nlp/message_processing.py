@@ -43,6 +43,7 @@ def group_threads(messages: list):
         for reply in result[message_['thread_ts']]['replies']:
             if reply['ts'] == message_['ts']:
                 reply['message'] = message_
+                return
 
     for message in messages:
         if 'replies' in message:

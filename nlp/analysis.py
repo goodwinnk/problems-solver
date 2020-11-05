@@ -1,17 +1,11 @@
 import json
 
-from sklearn.manifold import TSNE
-from sklearn.feature_extraction.text import TfidfVectorizer
-from nltk import PorterStemmer, LancasterStemmer, pprint
+from nltk import PorterStemmer
 from nltk.corpus import stopwords
 
 from nlp.translator import translate_parsed_text
 from nlp.corpus import read_corpus, create_corpus, save_corpus, get_corpus_diff
 from nlp.message_processing import read_data, parse_text, unparse_text, message_contain_russian, group_threads
-import matplotlib.pyplot as plt
-
-import seaborn as sns
-from sklearn.metrics.pairwise import cosine_similarity
 
 mystopwords = stopwords.words('english') + ['kotlin', 'build', 'test', 'compil', 'assembl']
 mystopwords.remove('not')
