@@ -1,4 +1,7 @@
 import json
+from collections import defaultdict
+from pprint import pprint
+
 import numpy as np
 import scipy
 import gensim
@@ -78,9 +81,9 @@ def build_similarities(topics, similarity_matrix, count=3):
     result = list()
     for i in range(len(topics)):
         similars = find_most_similar(i, similarity_matrix, count)
-        result.append({"origin": topics[i], "similars": []})
+        result.append({"origin": topics[i], "origin_id": i, "similars": []})
         for sim, index in similars:
-            result[-1]['similars'].append({"similarity": float(sim), "text": topics[index]})
+            result[-1]['similars'].append({"similarity": float(sim), "text": topics[index], "id": index})
     return result
 
 
@@ -121,7 +124,7 @@ def train_doc2vec():
     porter = PorterStemmer()
     my_stopwords = stopwords.words('english')
     train_corpus = list(
-        gensim.models.doc2vec.TaggedDocument(normalize(x, my_stopwords, porter, use_quoted=False), [i])
+        gensim.models.doc2vec.TaggedDocument(normalize(x, my_stopwords, porter, use_quoted=True), [i])
         for i, x in enumerate(all_topics))
     # window = 2; min_count = 1 | 0: 4091, 1: 247, 2: 125, 3: 71
     # window = 3; min_count = 1 | 0: 4128, 1: 225, 2: 114, 3: 61,
@@ -165,15 +168,140 @@ def doc2vec_results(topics, normalized, filename):
               indent=4)
 
 
-def main():
+def all_results():
     topics = list(map(lambda x: x['text'], json.load(open('data/processed/all_topics.json'))))
     porter = PorterStemmer()
     my_stopwords = stopwords.words('english')
     normalized = list(map(lambda x: normalize(x, my_stopwords, porter), topics))
     tfidf_matrix = get_tfidf_matrix(normalized)
-    tsne_res = tsne_transform(tfidf_matrix)
-    scatter_plot(tsne_res)
-    # doc2vec_results(topics, normalized, 'doc2vec_window3_min_count2_unquoted.json')
+    tfidf_svd_results(topics, tfidf_matrix, 'tfidf+svd.json')
+    tfidf_results(topics, tfidf_matrix, 'tfidf.json')
+    doc2vec_results(topics, normalized, 'doc2vec_window3_min_count2_unquoted.json')
+
+
+def build_histogram(filename):
+    data = json.load(open(filename, 'r'))
+    values = [item['similars'][0]['similarity'] for item in data]
+    plt.hist(values, bins=50)
+    plt.title(filename)
+    plt.show()
+    # tfidf cut 0.2
+    # tfidf+svd cut 0.7
+
+
+def manual_selector(cand, threshold, confirmed, item):
+    answer = 'n'
+    if cand['similarity'] > threshold:
+        for conf_cand in confirmed[str(item['origin_id'])]['similars']:
+            if conf_cand['id'] == cand['id']:
+                answer = 'y'
+                print('Found answer automatically')
+                break
+        if answer != 'y':
+            print('\n\n\n\n', item['origin'])
+            print("VVVVVVVVV_________SSSSSSSSSS")
+            print(cand['text'], '\n\n\n\n')
+            while answer.lower() not in ['y', 'n']:
+                answer = input()
+    return answer
+
+
+def threshold_selector(cand, threshold, confirmed, item):
+    answer = 'n'
+    if cand['similarity'] > threshold:
+        answer = 'y'
+    return answer
+
+
+def selection(input_fn, threshold, output_fn=None, confirmed_fn=None, selector=manual_selector):
+    data = json.load(open(input_fn, 'r'))
+    confirmed = defaultdict(lambda: {"origin": "", "similars": []})
+    if confirmed_fn is not None:
+        confirmed.update(json.load(open(confirmed_fn, 'r')))
+    result = defaultdict(lambda: {"origin": "", "similars": []})
+    for item in data:
+        for cand in item['similars']:
+            answer = selector(cand, threshold, confirmed, item)
+            if answer == 'y':
+                result[item['origin_id']]['similars'].append({'id': cand['id'], 'text': cand['text']})
+                result[item['origin_id']]["origin"] = item['origin']
+            if output_fn is not None:
+                json.dump(result, open(output_fn, 'w'), ensure_ascii=False, indent=4)
+    return result
+
+
+def subtract_dataset(first_fn: str, second_fn: str):
+    first = json.load(open(first_fn, 'r'))
+    second = json.load(open(second_fn, 'r'))
+    result = defaultdict(lambda: {"origin": "", "similars": []})
+    for key, value in first.items():
+        if key in second:
+            for first_item in first[key]['similars']:
+                if first_item not in second[key]['similars']:
+                    result[key]['origin'] = value['origin']
+                    result[key]['similars'].append(first_item)
+        else:
+            result[key] = value
+    return result
+
+
+def join_datasets(first_fn, second_fn):
+    result = json.load(open(first_fn, 'r'))
+    second = json.load(open(second_fn, 'r'))
+    print(f'Provided:\n\tFirst: {len(result)}\n\tSecond: {len(second)}')
+    for key, item in second.items():
+        if key not in result:
+            result[key] = item
+        else:
+            for sim_item in item['similars']:
+                if sim_item not in result[key]['similars']:
+                    result[key]['similars'].append(sim_item)
+    print(f'Total: {len(result)}')
+    return result
+
+
+def f_score(true_answers: defaultdict, dataset: defaultdict):
+    true_positives, false_negatives, false_positives = 0, 0, 0
+    for key, item in dataset.items():
+        assert isinstance(key, str)
+        for similar_item in item['similars']:
+            if similar_item in true_answers[key]['similars']:
+                true_positives += 1
+            else:
+                false_positives += 1
+    for key, item in true_answers.items():
+        assert isinstance(key, str)
+        for similar_item in item['similars']:
+            if similar_item not in dataset[key]['similars']:
+                false_negatives += 1
+    print(f'True positives: {true_positives}')
+    print(f'False positives: {false_positives}')
+    print(f'False negatives: {false_negatives}')
+    precision = true_positives / (true_positives + false_positives)
+    recall = true_positives / (true_positives + false_negatives)
+    print(f'Precission {precision}')
+    print(f'Recall {recall}')
+    print(f'F-SCORE: {2 * precision * recall / (precision + recall)}')
+
+
+def main():
+    true_answers = defaultdict(lambda: {"origin": "", "similars": []})
+    true_answers.update(json.load(open('data/dataset/all.json', 'r', encoding='utf-8')))
+    # dataset = defaultdict(lambda: {"origin": "", "similars": []})
+    # dataset.update(json.load(open('data/dataset/tfidf+svd_0.7.json', 'r', encoding='utf-8')))
+    # f_score(true_answers, dataset)
+
+    dataset = defaultdict(lambda: {"origin": "", "similars": []})
+    dataset.update(
+        json.loads(json.dumps(selection('data/vectorization/tfidf+svd.json', 0.7, selector=threshold_selector))))
+    f_score(true_answers, dataset)
+
+    # f_score('data/dataset/all.json', 'data/dataset/tfidf+svd_0.7.json')
+    # pprint(subtract_dataset('data/dataset/tfidf+svd_0.7.json', 'data/dataset/tfidf_0.2.json'))
+    # pprint(subtract_dataset('data/dataset/tfidf_0.2.json', 'data/dataset/tfidf+svd_0.7.json'))
+    # build_histogram('data/vectorization/tfidf+svd.json')
+    # json.dump(join_datasets('data/dataset/tfidf+svd_0.7.json', 'data/dataset/tfidf_0.2.json'),
+    #           open('data/dataset/all.json', 'w', encoding='utf-8'), ensure_ascii=False, indent=4)
 
 
 if __name__ == "__main__":
