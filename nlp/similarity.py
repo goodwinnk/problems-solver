@@ -11,21 +11,7 @@ from sklearn.decomposition import TruncatedSVD
 from sklearn.manifold import TSNE
 from sklearn.feature_extraction.text import TfidfVectorizer
 import matplotlib.pyplot as plt
-from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances
-
-from nlp.corpus import DummyStemmer
-from nlp.message_processing import extract_tokens, parse_text
-
-
-def normalize(text, stopwords=(), stemmer=None, use_quoted=True):
-    stemmer = stemmer if stemmer else DummyStemmer()
-    stemmed_stopwords = set(stemmer.stem(word) for word in stopwords)
-    result = []
-    for token in extract_tokens(parse_text(text), targets=['text', 'link', '????' if not use_quoted else 'quoted']):
-        stemmed = stemmer.stem(token)
-        if stemmed not in stemmed_stopwords:
-            result.append(stemmed)
-    return result
+from sklearn.metrics.pairwise import cosine_similarity
 
 
 def tsne_transform(matrix, n=2):
@@ -87,11 +73,13 @@ def build_similarities(topics, similarity_matrix, count=3):
     return result
 
 
-def tfidf_results(topics, tfidf_matrix, filename):
+def tfidf_results(topics, tfidf_matrix, filename=None):
     similarity = get_similarity_matrix(tfidf_matrix)
     similar_topics = build_similarities(topics, similarity)
-    json.dump(similar_topics, open(f'data/vectorization/{filename}', 'w', encoding='utf-8'), ensure_ascii=False,
-              indent=4)
+    if filename is not None:
+        json.dump(similar_topics, open(f'data/vectorization/{filename}', 'w', encoding='utf-8'), ensure_ascii=False,
+                  indent=4)
+    return similar_topics
 
 
 def tfidf_tsne_results(topics, tfidf_matrix, filename):
@@ -113,8 +101,8 @@ def tfidf_svd_results(topics, tfidf_matrix, filename):
               indent=4)
 
 
-def get_tfidf_matrix(corpus: list):
-    vectorizer = TfidfVectorizer(ngram_range=(1, 3))
+def get_tfidf_matrix(corpus: list, min_df=0, max_df=1.0, ngram_range=(1, 3)):
+    vectorizer = TfidfVectorizer(ngram_range=ngram_range, min_df=min_df, max_df=max_df)
     return vectorizer.fit_transform(map(lambda x: ' '.join(x), corpus))
 
 
@@ -190,7 +178,7 @@ def build_histogram(filename):
 
 
 def manual_selector(cand, threshold, confirmed, item):
-    answer = 'n'
+    answer = ''
     if cand['similarity'] > threshold:
         for conf_cand in confirmed[str(item['origin_id'])]['similars']:
             if conf_cand['id'] == cand['id']:
@@ -198,9 +186,11 @@ def manual_selector(cand, threshold, confirmed, item):
                 print('Found answer automatically')
                 break
         if answer != 'y':
-            print('\n\n\n\n', item['origin'])
+            print('\n\n\n\n')
+            pprint(item['origin']['origin'])
             print("VVVVVVVVV_________SSSSSSSSSS")
-            print(cand['text'], '\n\n\n\n')
+            pprint(cand['text']['origin'])
+            print('\n\n\n\n')
             while answer.lower() not in ['y', 'n']:
                 answer = input()
     return answer
@@ -213,8 +203,10 @@ def threshold_selector(cand, threshold, confirmed, item):
     return answer
 
 
-def selection(input_fn, threshold, output_fn=None, confirmed_fn=None, selector=manual_selector):
-    data = json.load(open(input_fn, 'r'))
+def selection(input_, threshold, output_fn=None, confirmed_fn=None, selector=manual_selector):
+    data = input_
+    if isinstance(input_, str):
+        data = json.load(open(input_, 'r'))
     confirmed = defaultdict(lambda: {"origin": "", "similars": []})
     if confirmed_fn is not None:
         confirmed.update(json.load(open(confirmed_fn, 'r')))
@@ -232,16 +224,23 @@ def selection(input_fn, threshold, output_fn=None, confirmed_fn=None, selector=m
 
 def subtract_dataset(first_fn: str, second_fn: str):
     first = json.load(open(first_fn, 'r'))
+    print(f'First size: ', len(first))
     second = json.load(open(second_fn, 'r'))
+    print(f'Second size: ', len(second))
     result = defaultdict(lambda: {"origin": "", "similars": []})
+    first_pairs = 0
     for key, value in first.items():
+        first_pairs += len(value['similars'])
         if key in second:
-            for first_item in first[key]['similars']:
-                if first_item not in second[key]['similars']:
+            first_ids = list(map(lambda x: x['id'], first[key]['similars']))
+            second_ids = list(map(lambda x: x['id'], second[key]['similars']))
+            for item_id, item in zip(first_ids, first[key]['similars']):
+                if item_id not in second_ids:
                     result[key]['origin'] = value['origin']
-                    result[key]['similars'].append(first_item)
+                    result[key]['similars'].append(item)
         else:
             result[key] = value
+    print('First pairs: ', first_pairs)
     return result
 
 
@@ -260,7 +259,7 @@ def join_datasets(first_fn, second_fn):
     return result
 
 
-def f_score(true_answers: defaultdict, dataset: defaultdict):
+def f_score(true_answers: defaultdict, dataset: defaultdict, print_stats=False):
     true_positives, false_negatives, false_positives = 0, 0, 0
     for key, item in dataset.items():
         assert isinstance(key, str)
@@ -274,14 +273,21 @@ def f_score(true_answers: defaultdict, dataset: defaultdict):
         for similar_item in item['similars']:
             if similar_item not in dataset[key]['similars']:
                 false_negatives += 1
-    print(f'True positives: {true_positives}')
-    print(f'False positives: {false_positives}')
-    print(f'False negatives: {false_negatives}')
-    precision = true_positives / (true_positives + false_positives)
-    recall = true_positives / (true_positives + false_negatives)
-    print(f'Precission {precision}')
-    print(f'Recall {recall}')
-    print(f'F-SCORE: {2 * precision * recall / (precision + recall)}')
+                print('_____________________________')
+                print(true_answers[key]['origin'], '\n\n')
+                print(similar_item)
+                print('\n\n')
+    precision = true_positives / (true_positives + false_positives) if true_positives + false_positives != 0 else 0
+    recall = true_positives / (true_positives + false_negatives) if true_positives + false_negatives != 0 else 0
+    f_score = 2 * precision * recall / (precision + recall) if precision + recall != 0 else 0
+    if print_stats:
+        print(f'True positives: {true_positives}')
+        print(f'False positives: {false_positives}')
+        print(f'False negatives: {false_negatives}')
+        print(f'Precission {precision}')
+        print(f'Recall {recall}')
+        print(f'F-SCORE: {f_score}')
+    return precision, recall, f_score
 
 
 def main():
@@ -293,8 +299,25 @@ def main():
 
     dataset = defaultdict(lambda: {"origin": "", "similars": []})
     dataset.update(
-        json.loads(json.dumps(selection('data/vectorization/tfidf+svd.json', 0.7, selector=threshold_selector))))
-    f_score(true_answers, dataset)
+        json.loads(json.dumps(selection('data/vectorization/tfidf+svd.json', 0.79, selector=threshold_selector))))
+    f_score(true_answers, dataset, print_stats=True)
+    precision, recall, f_scores, thresholds = [], [], [], []
+    for threshold in range(60, 91):
+        dataset = defaultdict(lambda: {"origin": "", "similars": []})
+        dataset.update(
+            json.loads(
+                json.dumps(
+                    selection('data/vectorization/tfidf+svd.json', threshold / 100, selector=threshold_selector))))
+        pr, rc, fs = f_score(true_answers, dataset)
+        precision.append(pr)
+        recall.append(rc)
+        f_scores.append(fs)
+        thresholds.append(threshold)
+    plt.plot(thresholds, precision, label='precision')
+    plt.plot(thresholds, recall, label='recall')
+    plt.plot(thresholds, f_scores, label='f_score')
+    plt.legend()
+    plt.show()
 
     # f_score('data/dataset/all.json', 'data/dataset/tfidf+svd_0.7.json')
     # pprint(subtract_dataset('data/dataset/tfidf+svd_0.7.json', 'data/dataset/tfidf_0.2.json'))
