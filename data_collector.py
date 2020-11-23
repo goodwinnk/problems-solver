@@ -97,6 +97,7 @@ class DataCollector:
 
     async def add_message(self, message):
         if message['channel'] in await self.get_following_channels_ids():
+            # TODO: maybe child messages contain 'thread_ts' too.
             if 'thread_ts' in message:
                 self.db_writer.add_child_messages([message], message['channel'], message['thread_ts'])
             else:

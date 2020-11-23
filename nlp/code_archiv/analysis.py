@@ -1,19 +1,22 @@
 import json
 
-from nltk import PorterStemmer, LancasterStemmer
+from nltk import PorterStemmer
 from nltk.corpus import stopwords
+
 from nlp.translator import translate_parsed_text
 from nlp.corpus import read_corpus, create_corpus, save_corpus, get_corpus_diff
 from nlp.message_processing import read_data, parse_text, unparse_text, message_contain_russian, group_threads
 
+mystopwords = stopwords.words('english') + ['kotlin', 'build', 'test', 'compil', 'assembl']
+mystopwords.remove('not')
+
 
 def translate_messages(messages: list, output_name):
-    global all_counter
-    russian_messages = list(filter(lambda x: message_contain_russian(x), messages))[1503:]
+    russian_messages = list(filter(lambda x: message_contain_russian(x), messages))
     ext_translations, translations = [], []
     for i, message in zip(range(len(russian_messages)), russian_messages):
         parsed = parse_text(message['text'])
-        print(i, all_counter + len(message['text']))
+        print(i)
         translated = translate_parsed_text(parsed)
         new_ext_message = {
             'origin': message['text'],
@@ -48,7 +51,7 @@ def handle_files():
             english.append(message)
     print(f"EN: {len(english)}\nRU: {len(russian)}")
 
-    eng_translations = read_data('data/translations/only_text_topics.json')
+    eng_translations = read_data('data/translations/only_text_translated_topics.json')
     true_rus_corpus = read_corpus('data/corpus/true-rus-corpus.txt')
     translation_corpus = create_corpus(eng_translations)
     eng_corpus = create_corpus(english)
@@ -73,23 +76,20 @@ def handle_files():
 
 
 def main():
-    # all_messages = read_data("data/kotlin_year")
-    # groups_dict, unknown_msg, system_msg = group_threads(all_messages)
-    # childs = []
-    # for thread_ts, thread in groups_dict.items():
-    #     childs.extend(map(lambda x: x['message'], thread['replies']))
-    # translate_messages(childs, 'child')
-    # list_a = json.load(open('data/translations/dont_touch_only_text_child.json', 'r', encoding='utf-8'))
-    # list_b = json.load(open('data/translations/only_text_child.json', 'r', encoding='utf-8'))
-    # list_r = list_a.extend(list_b)
-    # json.dump(list_r, open('data/translations/result_only_text.json', 'w', encoding='utf-8'), ensure_ascii=False,
-    #           indent=4)
-    all_translated = read_data('data/translations/dont_touch_only_text_child.json')
-    all_translated.extend(read_data('data/translations/only_text_topics.json'))
-    lancaster_corpus = create_corpus(all_translated, LancasterStemmer(), stopwords.words('english'))
-    porter_corpus = create_corpus(all_translated, PorterStemmer(), stopwords.words('english'))
-    save_corpus(lancaster_corpus, 'data/corpus/lancaster_corpus.json')
-    save_corpus(porter_corpus, 'data/corpus/porter_corpus.json')
+    data = read_data('data/tagged/tagged_topics.json')
+    positive, negative = [], []
+    for msg in data:
+        if 'is_question' not in msg:
+            print(msg)
+        if msg['is_question']:
+            positive.append(msg)
+        else:
+            negative.append(msg)
+    pos_corpus = create_corpus(positive, PorterStemmer(), stopwords=mystopwords)
+    neg_corpus = create_corpus(negative, PorterStemmer(), stopwords=mystopwords)
+    print(len(positive) / (len(positive) + len(negative)))
+    save_corpus(pos_corpus, 'data/tagged/pos_corpus.txt')
+    save_corpus(neg_corpus, 'data/tagged/neg_corpus.txt')
 
 
 if __name__ == "__main__":

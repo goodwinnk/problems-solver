@@ -16,6 +16,7 @@ and place there following line without \<brackets\>
 ```
 SLACK_BOT_TOKEN=<paste your bot token>
 SLACK_SIGNING_TOKEN=<paste your signing token>
+GOOGLE_APPLICATION_CREDENTIALS=<paste your translator token>
 ```
   
 **DO NOT ADD .env FILES TO YOUR GIT REPOSITORY**
@@ -52,7 +53,7 @@ Install your app to your workspace:
 YourApp -> Basic Information -> Install your app to your workspace -> Install
 
 [Install MongoDB](https://docs.mongodb.com/manual/installation/)
-
+# Running
 Run MongoDB:
 
 ```
@@ -73,3 +74,8 @@ python3 extracter.py
 ```
 The result will be in extracted foled.
 
+make analysis/translation/research:
+  * move from google drive data folder to problems-solver/nlp/data
+  * run analysys.py
+  * write your own scripts using nlp module auxiliary scripts
+  

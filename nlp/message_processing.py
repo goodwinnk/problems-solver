@@ -5,7 +5,7 @@ from collections import Counter
 
 rus_letters = 'абвгдеёжзийклмнопрстуфхцчшщьыъэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЬЫЪЭЮЯ'
 eng_letters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
-all_letters = rus_letters + eng_letters
+all_letters = rus_letters + eng_letters + '0123456789'
 
 
 def text_contain_language(text: str, russian=True) -> bool:
@@ -21,7 +21,30 @@ def message_contain_russian(message):
     return text_contain_language(message['text'])
 
 
-def read_data(file_or_folder_path: str) -> list:
+class Message:
+    def __init__(self, text: str, channel_id: str, ts: str, author_id):
+        self.text = text
+        self.author_id = author_id
+        self.channel_id = channel_id
+        self.ts = ts
+
+    @classmethod
+    def from_dict(cls, dict_data: dict):
+        channel_id = dict_data.get('channel_id', 'UNKNOWN')
+        author_id = dict_data.get('user', dict_data.get('bot_id', 'UNKNOWN'))
+        return cls(dict_data['text'], channel_id, dict_data['ts'], author_id)
+
+    def get_key(self):
+        return f'{self.channel_id}-{self.ts}'
+
+    def __cmp__(self, other):
+        return self.channel_id == other.channel_id and self.ts == other.ts
+
+    def __str__(self):
+        return self.text
+
+
+def read_data(file_or_folder_path: str):
     if os.path.isdir(file_or_folder_path):
         result = []
         files_list = glob.glob(f"{file_or_folder_path}/*.json")
@@ -36,13 +59,13 @@ def read_data(file_or_folder_path: str) -> list:
 
 def group_threads(messages: list):
     result = dict()
-    unhandled_ = []
-    unknown, system = [], []
+    unhandled_, system = [], []
 
     def add_message(result, message_):
         for reply in result[message_['thread_ts']]['replies']:
             if reply['ts'] == message_['ts']:
                 reply['message'] = message_
+                return
 
     for message in messages:
         if 'replies' in message:
@@ -55,15 +78,15 @@ def group_threads(messages: list):
         elif 'subtype' in message:
             system.append(message)
         else:
-            unknown.append(message)
+            result[message['ts']] = message
 
     for message in unhandled_:
         if 'thread_ts' in message:
             if message['thread_ts'] in result:
                 add_message(result, message)
                 continue
-        unknown.append(message)
-    return result, unknown, system
+        result[message['ts']] = message
+    return result, system
 
 
 def parse_text(raw_text):
@@ -199,7 +222,7 @@ def frequency_analysis(messages, stemmer, stopwords: set):
     for message in messages:
         stemmed_tokens = []
         for token in extract_tokens(parse_text(message['text'])):
-            if token not in stopwords:
+            if token not in stopwords and stemmer.stem(token) not in stopwords:
                 stemmed_tokens.append(stemmer.stem(token))
         result.update(stemmed_tokens)
     return result

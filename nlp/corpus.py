@@ -19,10 +19,12 @@ def read_corpus(path) -> list:
     return result
 
 
-def create_corpus(messages, stemmer: StemmerI, stopwords=()):
-    stemmer = DummyStemmer() if not stemmer else stemmer
-    stats = frequency_analysis(messages, stemmer, stopwords=set(stopwords))
-    return sorted(list((key, value) for key, value in stats.items()), key=lambda x: x[1], reverse=True)
+def create_corpus(messages, stemmer: StemmerI, stopwords=(), merge=True) -> list:
+    if merge:
+        stemmer = DummyStemmer() if not stemmer else stemmer
+        stats = frequency_analysis(messages, stemmer, set(stopwords))
+        return sorted(list((key, value) for key, value in stats.items()), key=lambda x: x[1], reverse=True)
+    return list(frequency_analysis([message], stemmer, set(stopwords)) for message in messages)
 
 
 def save_corpus(corpus: list, path: str):
