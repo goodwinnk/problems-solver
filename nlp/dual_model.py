@@ -10,7 +10,7 @@ from nlp.text_model import TextSimilarityModel
 import matplotlib.pyplot as plt
 
 
-class DummyClassifier():
+class DummyClassifier:
     def fit(self, a, b, **kwargs):
         pass
 
@@ -19,31 +19,45 @@ class DummyClassifier():
 
 
 def plot_field(start_x, end_x, start_y, end_y, x, y, classifier):
-    field_x, field_y, field_c = [], [], []
-    for xx in range(int(start_x * 100), int(end_x * 100 + 1), 1):
-        for yy in range(int(start_y * 100), int(end_y * 100 + 1), 1):
-            field_x.append(xx / 100)
-            field_y.append(yy / 100)
-            field_c.append('g' if classifier.predict([[field_x[-1], field_y[-1]]]) else 'b')
-    plt.scatter(field_x, field_y, c=field_c)
-    plot_features(x, y)
+    field_x, field_y, field_z, field_c = [], [], [], []
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    for xx in range(int(start_x * 100), int(end_x * 100 + 1), 10):
+        for yy in range(int(start_y * 100), int(end_y * 100 + 1), 10):
+            for zz in range(0, 101, 10):
+                field_x.append(xx / 100)
+                field_y.append(yy / 100)
+                field_z.append(zz / 100)
+                field_c.append((0.1, 0.5, 0.1, 0) if classifier.predict([[field_x[-1], field_y[-1], field_z[-1]]]) \
+                                   else (0.5, 0.1, 0.1, 1))
+    ax.scatter(field_x, field_z, field_y, c=field_c)
+    plot_features(x, y, ax)
     plt.show()
 
 
-def plot_features(x, y, show=False):
+def plot_features(x, y, ax=None, show=False):
     x, y = zip(*list(sorted(zip(x, y), key=lambda v: v[1])))
     xs = tuple(zip(*x))
-    plt.gca().set_facecolor('silver')
-    plt.scatter(xs[0], xs[1], c=list(map(lambda decision: 'yellow' if decision else 'black', y)))
+    if ax is None:
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+    ax.set_facecolor('silver')
+    ax.scatter(xs[0], xs[2], xs[1], c=list(map(lambda decision: 'yellow' if decision else 'black', y)))
     if show:
         plt.show()
 
 
 class DualModel:
     def __init__(self):
-        self.text_model = TextSimilarityModel(n_components=100)
-        self.code_model = ErrorCodeSimilarityModel(max_df=0.2)
-        self.classifier = DecisionTreeClassifier(min_samples_leaf=5)
+        self.text_model = TextSimilarityModel(n_components=250)
+        self.code_model = ErrorCodeSimilarityModel(max_df=0.08)  # max_df=0.014
+        self.classifier = DecisionTreeClassifier(min_samples_leaf=15)
+        # n_comp=250, min_samples=15, max_df 0.08 Pr: 69.6% Rc: 68.6%
+        # n_comp=250, min_samples=15, max_df 0.08 Pr: 69.6% Rc: 68.6%
+        # n_comp=250, min_samples=15, max_df 0.014 Pr: 63.8 % Rc: 73.5%
+        # n_comp=100, min_samples=20, max_df 0.08 Pr: 75.8% Rc: 64.7
+        # n_comp=100, min_samples=20, max_df 0.014,Pr: 64.5% Rc: 70.5%
+        # n_comp=100, min_samples=40, max_df 0.014,Pr: Rc: 64.5% Rc: 70.5%
 
     def create_dataset(self, messages_list: List[Message], dataset_keys: List[List], plot=False):
         key_to_message = dict(map(lambda m: (m.get_key(), m), messages_list))
@@ -54,7 +68,8 @@ class DualModel:
                 continue
             text_sim = self.text_model.compare_messages(first, second)
             code_sim = self.code_model.compare_messages(first, second)
-            x.append([text_sim, code_sim])
+            len_cmpr = self.text_model.len_comparision(first, second)
+            x.append([text_sim, code_sim, len_cmpr])
             y.append(answer)
         if plot:
             plot_features(x, y, show=True)
@@ -71,7 +86,7 @@ class DualModel:
             self.classifier.fit(train_x, train_y)
         else:
             test_x, test_y = x, y
-        plot_field(-0.25, 1, 0, 1, x, y, self.classifier)
+        plot_field(0, 1, 0, 1, x, y, self.classifier)
         test_res = self.classifier.predict(test_x)
         stats = defaultdict(int)
         for f, s in zip(test_res, test_y):
@@ -87,9 +102,11 @@ class DualModel:
         self.text_model.train(messages_list)
         self.code_model.train(messages_list)
         x, y = self.create_dataset(messages_list, dataset)
-        coef_true = len(y) / sum(y)
+        positive_count = sum(y)
+        coef_true = len(y) / positive_count if positive_count else 1
         weights = list(map(lambda s: coef_true if x else 1, y))
         self.classifier.fit(x, y, sample_weight=weights)
+        print(self.classifier.get_n_leaves(), self.classifier.get_depth())
 
     def get_similar_candidates(self, message: Message):
         result = defaultdict(dict)
@@ -108,24 +125,21 @@ class DualModel:
                 record['text_similarity'] = self.text_model.compare_messages(message, record['message'])
             elif 'code_similarity' not in record:
                 record['code_similarity'] = self.code_model.compare_messages(message, record['message'])
+            record['len_comparision'] = self.text_model.len_comparision(message, record['message'])
         return result
 
-    def filter_candidates(self, candidates: dict, origin_msg):
-        result = []
-        for key, record in candidates.items():
-            text_sim, code_sim = record['text_similarity'], record['code_similarity']
-            if self.classifier.predict([[text_sim, code_sim]]):
-                result.append(record['message'])
-            elif text_sim > 0.75:
-                print('_______________________________________________')
-                print(origin_msg)
-                print(record['message'])
-        return result
+    def filter_candidates(self, candidates: dict):
+        result, similarity = [], []
+        for key, rec in candidates.items():
+            text_sim, code_sim, len_cmpr = rec['text_similarity'], rec['code_similarity'], rec['len_comparision']
+            if self.classifier.predict([[text_sim, code_sim, len_cmpr]]):
+                result.append(rec['message'])
+                similarity.append([text_sim, code_sim, len_cmpr])
+        return result, similarity
 
     def get_similar_messages(self, message: Message):
         candidates = self.get_similar_candidates(message)
-        result = self.filter_candidates(candidates, message)
-        return result
+        return self.filter_candidates(candidates)
 
 
 def manual_filtering():
@@ -164,7 +178,7 @@ def manual_filtering():
 
 def test_text_model():
     messages = [Message.from_dict(msg) for msg in read_data('data/processed/all_topics.json')]
-    dataset = read_data('data/dataset/light_prod.json')
+    dataset = read_data('data/dataset/production.json')
     shuffle(dataset)
     model = DualModel()
     model.train(messages, dataset)
@@ -173,7 +187,7 @@ def test_text_model():
     total, unknown_counter, has_counter = 0, 0, 0
     candidates = []
     for message in messages:
-        result = model.get_similar_messages(message)
+        result, similarities = model.get_similar_messages(message)
         total += len(result)
         for sim_message in result:
             if sim_message != message:
@@ -185,10 +199,10 @@ def test_text_model():
                     has_counter += 1
     json.dump(candidates, open('data/dataset/unknown.json', 'w'))
     print(f'Messages: ', len(messages))
-    print(f'Found answers: ', total)
-    print(f'Found new answers', unknown_counter)
-    print(f'Matched with dataset: ', has_counter)
+    print(f'Found answers: ', total - len(messages))
+    print(f'Precision', has_counter / (has_counter + unknown_counter))
+    print(f'Recall: ', has_counter / len(positives))
+
 
 if __name__ == '__main__':
     test_text_model()
-    # manual_filtering()

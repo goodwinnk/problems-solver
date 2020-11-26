@@ -29,7 +29,6 @@ class TextSimilarityModel:
         self.stemmer = PorterStemmer()
         # nltk.download()  # TODO make it one time
         self.stopwords = stopwords.words('english')
-        # n_components=100, max_df=0.2 - working
         self.svd = TruncatedSVD(n_components=n_components, n_iter=7, random_state=42)
         self.vectorizer = TfidfVectorizer(ngram_range=ngram_range, max_df=max_df)
         self.messages_list = None
@@ -37,6 +36,10 @@ class TextSimilarityModel:
 
     def normalize_data(self, messages_list):
         return list(map(lambda m: normalize(m.text, self.stopwords, self.stemmer, True), messages_list))
+
+    def len_comparision(self, first, second):
+        lens = list(map(len, self.normalize_data([first, second])))
+        return min(lens[0] / lens[1], lens[1] / lens[0]) if lens[0] and lens[1] else 0
 
     def train(self, messages_list: List[Message]):
         self.messages_list = messages_list
