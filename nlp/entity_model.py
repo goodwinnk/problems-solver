@@ -7,23 +7,7 @@ from nlp.message_processing import Message, extract_tokens, parse_text, read_dat
 from typing import List, Set
 
 
-def extract_entities(messages_list) -> List[Set]:
-    result = []
-    stemmer = nltk.PorterStemmer()
-    vocabulary = set(stemmer.stem(word) for word in words.words())
-    for msg in messages_list:
-        text = msg.text
-        result.append([])
-        tokens = extract_tokens(parse_text(text), targets=['text', 'link', 'quoted'])
-        for token in tokens:
-            token = token.lower()
-            if stemmer.stem(token) not in vocabulary:
-                result[-1].append(token)
-        result[-1] = set(result[-1])
-    return result
-
-
-class EntitySimilarity:
+class EntitySimilarityModel:
 
     def __init__(self):
         self.messages_list = None
@@ -32,13 +16,29 @@ class EntitySimilarity:
             'hi' in words.words()
         except LookupError:
             nltk.download('corpus')
+        self.stemmer = nltk.PorterStemmer()
+        self.vocabulary = None
+
+    def extract_entities(self, messages_list) -> List[Set]:
+        result = []
+        for msg in messages_list:
+            text = msg.text
+            result.append([])
+            tokens = extract_tokens(parse_text(text), targets=['text', 'link', 'quoted'])
+            for token in tokens:
+                token = token.lower()
+                if self.stemmer.stem(token) not in self.vocabulary:
+                    result[-1].append(token)
+            result[-1] = set(result[-1])
+        return result
 
     def train(self, messages_list: List[Message]):
         self.messages_list = messages_list
-        self.entity_matrix = extract_entities(messages_list)
+        self.vocabulary = set(self.stemmer.stem(word) for word in words.words())
+        self.entity_matrix = self.extract_entities(messages_list)
 
     def get_vector(self, message: Message):
-        return set(extract_entities([message])[0])
+        return set(self.extract_entities([message])[0])
 
     def jaccar_index(self, first: set, second: set):
         if len(first) + len(second):
@@ -61,7 +61,7 @@ class EntitySimilarity:
 
 def test_text_model():
     messages = [Message.from_dict(msg) for msg in read_data('data/processed/all_topics.json')]
-    tsm = EntitySimilarity()
+    tsm = EntitySimilarityModel()
     tsm.train(messages)
     sim = tsm.find_similars(Message("Does anyone have assembly via JPS? "
                               "My idea stopped running at first, jarnick`kotlin-plugin.jar`"

@@ -4,9 +4,11 @@ from pprint import pprint
 from typing import List
 from random import shuffle
 from sklearn.tree import DecisionTreeClassifier
-from nlp.code_model import ErrorCodeSimilarityModel
-from nlp.message_processing import Message, read_data
 from nlp.text_model import TextSimilarityModel
+from nlp.code_model import ErrorCodeSimilarityModel
+from nlp.entity_model import EntitySimilarityModel
+from nlp.message_processing import Message, read_data
+
 import matplotlib.pyplot as plt
 
 
@@ -51,7 +53,9 @@ class DualModel:
     def __init__(self):
         self.text_model = TextSimilarityModel(n_components=250)
         self.code_model = ErrorCodeSimilarityModel(max_df=0.08)  # max_df=0.014
-        self.classifier = DecisionTreeClassifier(min_samples_leaf=15)
+        self.entity_model = EntitySimilarityModel()
+        self.classifier = DecisionTreeClassifier(min_samples_leaf=10)
+        self.x, self.y = None, None
         # n_comp=250, min_samples=15, max_df 0.08 Pr: 69.6% Rc: 68.6%
         # n_comp=250, min_samples=15, max_df 0.08 Pr: 69.6% Rc: 68.6%
         # n_comp=250, min_samples=15, max_df 0.014 Pr: 63.8 % Rc: 73.5%
@@ -68,8 +72,8 @@ class DualModel:
                 continue
             text_sim = self.text_model.compare_messages(first, second)
             code_sim = self.code_model.compare_messages(first, second)
-            len_cmpr = self.text_model.len_comparision(first, second)
-            x.append([text_sim, code_sim, len_cmpr])
+            entity_sim = self.entity_model.compare_messages(first, second)
+            x.append([text_sim, code_sim, entity_sim])
             y.append(answer)
         if plot:
             plot_features(x, y, show=True)
@@ -79,14 +83,15 @@ class DualModel:
         if do_train:
             self.text_model.train(messages_list)
             self.code_model.train(messages_list)
-        x, y = self.create_dataset(messages_list, dataset, True)
-        train_x, train_y = x[:int(len(x) * 0.8)], y[:int(len(y) * 0.8)]
-        test_x, test_y = x[int(len(x) * 0.8):], y[int(len(y) * 0.8):]
+            self.entity_model.train(messages_list)
+            self.x, self.y = self.create_dataset(messages_list, dataset, True)
+        train_x, train_y = self.x[:int(len(self.x) * 0.8)], self.y[:int(len(self.y) * 0.8)]
+        test_x, test_y = self.x[int(len(self.x) * 0.8):], self.y[int(len(self.y) * 0.8):]
         if do_train:
             self.classifier.fit(train_x, train_y)
         else:
-            test_x, test_y = x, y
-        plot_field(0, 1, 0, 1, x, y, self.classifier)
+            test_x, test_y = self.x, self.y
+        plot_field(0, 1, 0, 1, self.x, self.y, self.classifier)
         test_res = self.classifier.predict(test_x)
         stats = defaultdict(int)
         for f, s in zip(test_res, test_y):
@@ -99,13 +104,21 @@ class DualModel:
         pprint(stats)
 
     def train(self, messages_list: List[Message], dataset: List[List]):
+        print('Train text model')
         self.text_model.train(messages_list)
+        print('Train code model')
         self.code_model.train(messages_list)
-        x, y = self.create_dataset(messages_list, dataset)
-        positive_count = sum(y)
-        coef_true = len(y) / positive_count if positive_count else 1
-        weights = list(map(lambda s: coef_true if x else 1, y))
-        self.classifier.fit(x, y, sample_weight=weights)
+        print('Train entity model')
+        self.entity_model.train(messages_list)
+        print('Estimators trained')
+        print('Creating dataset')
+        self.x, self.y = self.create_dataset(messages_list, dataset)
+        positive_count = sum(self.y)
+        coef_true = 1  # len(self.y) / (positive_count) if positive_count else 1
+        weights = list(map(lambda s: coef_true if s else 1, self.y))
+        print('Train classifier')
+        self.classifier.fit(self.x, self.y, sample_weight=weights)
+        print('Trained')
         print(self.classifier.get_n_leaves(), self.classifier.get_depth())
 
     def get_similar_candidates(self, message: Message):
@@ -125,16 +138,16 @@ class DualModel:
                 record['text_similarity'] = self.text_model.compare_messages(message, record['message'])
             elif 'code_similarity' not in record:
                 record['code_similarity'] = self.code_model.compare_messages(message, record['message'])
-            record['len_comparision'] = self.text_model.len_comparision(message, record['message'])
+            record['entity_similarity'] = self.entity_model.compare_messages(message, record['message'])
         return result
 
     def filter_candidates(self, candidates: dict):
         result, similarity = [], []
         for key, rec in candidates.items():
-            text_sim, code_sim, len_cmpr = rec['text_similarity'], rec['code_similarity'], rec['len_comparision']
-            if self.classifier.predict([[text_sim, code_sim, len_cmpr]]):
+            text_sim, code_sim, entity_sim = rec['text_similarity'], rec['code_similarity'], rec['entity_similarity']
+            if self.classifier.predict([[text_sim, code_sim, entity_sim]]):
                 result.append(rec['message'])
-                similarity.append([text_sim, code_sim, len_cmpr])
+                similarity.append([text_sim, code_sim, entity_sim])
         return result, similarity
 
     def get_similar_messages(self, message: Message):
