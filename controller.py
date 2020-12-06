@@ -1,12 +1,11 @@
-from pymongo import MongoClient, DESCENDING
+from pymongo import DESCENDING, database
 
-from utils.abstract_db_writer import AbstractDbWriter
+from utils.abstractcontroller import AbstractController
 
 
-class MongoDbWriter(AbstractDbWriter):
-    def __init__(self):
-        self.client = MongoClient()
-        self.db = self.client.get_database('problems_solver')
+class Controller(AbstractController):
+    def __init__(self, db: database.Database):
+        self.db = db
         self.channels_states = {}  # channel_id: channel_state
 
     def get_channels_states(self) -> dict:
@@ -29,6 +28,12 @@ class MongoDbWriter(AbstractDbWriter):
             last_update = max(last_update, msg['ts'])
         self.db[channel_id].insert_many(messages)
         self.channels_states[channel_id]['last_update'] = last_update
+
+    def get_parent_messages(self, channel_id: str) -> list:
+        return list(self.db[channel_id].find({}))
+
+    def get_dataset_messages(self, channel_id: str) -> list:
+        return list(self.db[f'{channel_id}-positive'].find({}))
 
     def add_child_messages(self, messages: list, channel_id: str, parent_ts: str):
         parent_i = -1

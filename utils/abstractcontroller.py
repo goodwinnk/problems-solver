@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 
-class AbstractDbWriter(ABC):
+class AbstractController(ABC):
     @abstractmethod
     def update_channels_states(self, channels_states: dict):
         """
@@ -30,4 +30,12 @@ class AbstractDbWriter(ABC):
 
     @abstractmethod
     def get_latest_timestamp(self, channel_id: str) -> float:
+        pass
+
+    @abstractmethod
+    def get_parent_messages(self, channel_id: str) -> list:
+        pass
+
+    @abstractmethod
+    def get_dataset_messages(self, channel_id: str) -> list:
         pass

@@ -54,7 +54,7 @@ class EntitySimilarityModel:
         def dist_func(entities: set):
             return self.jaccar_index(vector, entities)
 
-        similarity = np.array(list(map(dist_func, self.entity_matrix)))
+        similarity = np.array(list(map(dist_func, self.entity_matrix)), dtype=object)
         top_count_idx = np.argsort(similarity)[-count:]
         return [(similarity[index], self.messages_list[index]) for index in reversed(top_count_idx)]
 

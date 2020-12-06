@@ -1,21 +1,32 @@
 import os
 import logging
 from dotenv import load_dotenv
+from pymongo import MongoClient
 
 from slack_bolt.async_app import AsyncApp
 from slack_sdk.web.async_client import AsyncWebClient
 
 from data_collector import DataCollector
-from mongo_db_writer import MongoDbWriter
+from controller import Controller
 from app_home import AppHome
+from nlp.message_processing import Message
 
+from nlp.question_detector import is_question
+from model_manager import ModelManager
 from utils.message_filters import *
 
 load_dotenv('secret.env')
 logging.basicConfig(level=logging.INFO)
 
-data_collector = DataCollector(MongoDbWriter())
+controller = Controller(MongoClient().get_database('problems_solver'))
+
+model_manager = ModelManager(os.environ.get('MODEL_FOLDER'), controller)
+# model_manager.load_from_sources('nlp/data/processed/all_topics.json', 'nlp/data/dataset/production.json', 'UNKNOWN')
+model_manager.load_models()
+
+data_collector = DataCollector(controller)
 app_home = AppHome(data_collector)
+
 
 app = AsyncApp(
     token=os.environ.get("SLACK_BOT_TOKEN"),
@@ -50,14 +61,31 @@ async def choose_channel(ack, body, client, payload, logger):
 @app.message("")
 async def message_handler(client: AsyncWebClient, event, message, logger):
     if message_contain_russian(message):
-        logger.info('Contain russian symbols. Translation required')
-        message = translate_message(message)
-        logger.info('Was translated (Actually no)')
-    await data_collector.add_message(message)
-    if answer_trigger(message):
-        await client.chat_postMessage(channel=event['channel'],
-                                      thread_ts=get_thread_ts(event),
-                                      text='Answer in thread')
+        # logger.info('Contain russian symbols. Translation required')
+        # message = translate_message(message)
+        # logger.info('Was translated (Actually no)')
+        return
+
+    logger.info(message)
+    answer = 'Question/problem is not recognized.'
+    if is_question(message):
+        if await data_collector.message_from_following_channel(message) or message.get('channel_type', 'unk') == 'im':
+            if message.get('channel_type', 'unk') == 'im':
+                model = model_manager.get_model('UNKNOWN')
+            else:
+                model = model_manager.get_model(event['channel'])
+                await data_collector.add_message(message)
+            messages = model.get_similar_messages(Message.from_dict(message))
+            logger.info(f"Founded {len(messages)} similar messages")
+            if messages:
+                answer = '_____________________\n'.join(map(lambda rec: f"{rec[0]}\ntext_sim: {rec[1][0]}\n"
+                                                                        f"code_sim: {rec[1][1]}\n"
+                                                                        f"entity_sim: {rec[1][2]}\n", messages))
+            else:
+                answer = 'No similar messages.'
+    await client.chat_postMessage(channel=event['channel'],
+                                  thread_ts=get_thread_ts(event),
+                                  text=answer)
     logger.info(message)
 
 

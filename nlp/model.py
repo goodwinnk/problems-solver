@@ -1,4 +1,7 @@
 import json
+import pickle
+import logging
+
 from collections import defaultdict
 from pprint import pprint
 from typing import List
@@ -31,8 +34,11 @@ def plot_field(start_x, end_x, start_y, end_y, x, y, classifier):
                 field_y.append(yy / 100)
                 field_z.append(zz / 100)
                 field_c.append((0.1, 0.5, 0.1, 0) if classifier.predict([[field_x[-1], field_y[-1], field_z[-1]]]) \
-                                   else (0.5, 0.1, 0.1, 1))
+                                   else 'r')
     ax.scatter(field_x, field_z, field_y, c=field_c)
+    ax.set_xlabel('text similarity')
+    ax.set_ylabel('entity similarity')
+    ax.set_zlabel('code similarity')
     plot_features(x, y, ax)
     plt.show()
 
@@ -49,7 +55,7 @@ def plot_features(x, y, ax=None, show=False):
         plt.show()
 
 
-class DualModel:
+class Model:
     def __init__(self):
         self.text_model = TextSimilarityModel(n_components=250)
         self.code_model = ErrorCodeSimilarityModel(max_df=0.08)  # max_df=0.014
@@ -62,6 +68,18 @@ class DualModel:
         # n_comp=100, min_samples=20, max_df 0.08 Pr: 75.8% Rc: 64.7
         # n_comp=100, min_samples=20, max_df 0.014,Pr: 64.5% Rc: 70.5%
         # n_comp=100, min_samples=40, max_df 0.014,Pr: Rc: 64.5% Rc: 70.5%
+
+    @classmethod
+    def load_model(cls, filepath):
+        model = pickle.load(open(filepath, 'rb'))
+        if isinstance(model, Model):
+            logging.info('Model was loaded')
+            logging.info(f'Model contain {len(model.text_model.messages_list)} messages')
+            return model
+        raise TypeError("Wrong model class")
+
+    def save_model(self, filepath='model'):
+        pickle.dump(self, open(filepath, 'wb'))
 
     def create_dataset(self, messages_list: List[Message], dataset_keys: List[List], plot=False):
         key_to_message = dict(map(lambda m: (m.get_key(), m), messages_list))
@@ -104,22 +122,24 @@ class DualModel:
         pprint(stats)
 
     def train(self, messages_list: List[Message], dataset: List[List]):
-        print('Train text model')
+        logging.info('Train text model')
         self.text_model.train(messages_list)
-        print('Train code model')
+        logging.info('Train code model')
         self.code_model.train(messages_list)
-        print('Train entity model')
+        logging.info('Train entity model')
         self.entity_model.train(messages_list)
-        print('Estimators trained')
-        print('Creating dataset')
+        logging.info('Estimators trained')
+        logging.info('Creating dataset')
         self.x, self.y = self.create_dataset(messages_list, dataset)
         positive_count = sum(self.y)
         coef_true = 1  # len(self.y) / (positive_count) if positive_count else 1
         weights = list(map(lambda s: coef_true if s else 1, self.y))
-        print('Train classifier')
+        logging.info('Train classifier')
+        if len(self.x) <= 10 or positive_count in [0, len(self.x)]:
+            self.classifier = DummyClassifier()
+            logging.warning("DATASET IS EMPTY, SO CLASSIFIER IS NOT WORKING(always answer YES, its similar)")
         self.classifier.fit(self.x, self.y, sample_weight=weights)
-        print('Trained')
-        print(self.classifier.get_n_leaves(), self.classifier.get_depth())
+        logging.info('Trained')
 
     def get_similar_candidates(self, message: Message):
         result = defaultdict(dict)
@@ -142,13 +162,12 @@ class DualModel:
         return result
 
     def filter_candidates(self, candidates: dict):
-        result, similarity = [], []
+        result = []
         for key, rec in candidates.items():
             text_sim, code_sim, entity_sim = rec['text_similarity'], rec['code_similarity'], rec['entity_similarity']
             if self.classifier.predict([[text_sim, code_sim, entity_sim]]):
-                result.append(rec['message'])
-                similarity.append([text_sim, code_sim, entity_sim])
-        return result, similarity
+                result.append((rec['message'], [text_sim, code_sim, entity_sim]))
+        return result
 
     def get_similar_messages(self, message: Message):
         candidates = self.get_similar_candidates(message)
@@ -193,7 +212,7 @@ def test_text_model():
     messages = [Message.from_dict(msg) for msg in read_data('data/processed/all_topics.json')]
     dataset = read_data('data/dataset/production.json')
     shuffle(dataset)
-    model = DualModel()
+    model = Model()
     model.train(messages, dataset)
     model.test(messages, dataset, do_train=False)
     positives = read_data('data/dataset/positives/all_positives.json')
@@ -211,11 +230,27 @@ def test_text_model():
                 else:
                     has_counter += 1
     json.dump(candidates, open('data/dataset/unknown.json', 'w'))
-    print(f'Messages: ', len(messages))
+    print(f'Messages: ', len(messages), ', positive pairs:', len(positives))
     print(f'Found answers: ', total - len(messages))
     print(f'Precision', has_counter / (has_counter + unknown_counter))
     print(f'Recall: ', has_counter / len(positives))
 
 
+def new_test():
+    messages = [Message.from_dict(msg) for msg in read_data('data/processed/all_topics.json')]
+    dataset = read_data('data/dataset/production.json')
+    shuffle(dataset)
+    model = Model()
+    model.train(messages, dataset)
+    model.save_model('./models/C01CBLSMX0V')
+    # model = Model.load_model('model')
+    # text = "When I incrementally compile stdlib, I sometimes get an error `has several compatible actual declarations in modules &lt;kotlin-stdlib&gt;, &lt;kotlin-stdlib&gt;` on many actuals:\n<https://scans.gradle.com/s/nwmexsnqsykoe/console-log#L267>\nrestarting doesn't help, only clean helps"
+    # res = model.get_similar_messages(Message(text, '', '', ''))
+    # for item in res[0]:
+    #     print('______________________________')
+    #     print(item)
+
+
 if __name__ == '__main__':
-    test_text_model()
+    new_test()
+    # test_text_model()

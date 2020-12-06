@@ -62,7 +62,7 @@ def is_question(message) -> bool:
     contain_problem = any(  # broke, resolve???
         check_contain_words(parsed, {'error', 'issu', 'problem', 'except', 'wrong', 'fail', 'fall', 'crash', 'broke'},
                             PorterStemmer()))
-    question_words = any(check_contain_words(parsed, {'why', 'how'}, PorterStemmer()))
+    question_words = any(check_contain_words(parsed, {'why', 'how', 'help'}, PorterStemmer()))
     question_mark = any(map(lambda x: x['type'] != 'code' and '?' in x['text'], parsed))
     return contain_problem or problem_in_code or question_mark or question_words
 

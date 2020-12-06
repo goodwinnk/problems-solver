@@ -1,5 +1,7 @@
 import re
+import logging
 import numpy as np
+
 from typing import List
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -38,22 +40,29 @@ class ErrorCodeSimilarityModel:
 
     def train(self, messages_list: List[Message]):
         self.messages_list = messages_list
-        code = extract_code(messages_list)
-        self.vector_matrix = self.vectorizer.fit_transform(map(lambda x: ' '.join(x), code))
+        code = list(map(lambda x: ' '.join(x), extract_code(messages_list)))
+        try:
+            self.vector_matrix = self.vectorizer.fit_transform(code)
+        except ValueError:
+            logging.info("WARNING NO CODE IN MESSAGES, so code model is not working.")
+            self.vector_matrix = None
 
     def compare_messages(self, first: Message, second: Message):
         return cosine_similarity([self.get_vector(first)], [self.get_vector(second)])[0, 0]
 
     def get_vector(self, message: Message):
         code = ' '.join(extract_code([message])[0])
-        return self.vectorizer.transform([code]).toarray()[0]
+        if self.vector_matrix is not None:
+            return self.vectorizer.transform([code]).toarray()[0]
+        return [0]
 
     def find_similars(self, message: Message, count=5):
-        vector = self.get_vector(message)
-        similarity = cosine_similarity([vector], self.vector_matrix)[0]
-        top_count_idx = np.argsort(similarity)[-count:]
-        return [(similarity[index], self.messages_list[index]) for index in reversed(top_count_idx)]
-
+        if self.vector_matrix is not None:
+            vector = self.get_vector(message)
+            similarity = cosine_similarity([vector], self.vector_matrix)[0]
+            top_count_idx = np.argsort(similarity)[-count:]
+            return [(similarity[index], self.messages_list[index]) for index in reversed(top_count_idx)]
+        return []
 
 def test_text_model():
     messages = [Message.from_dict(msg) for msg in read_data('data/processed/all_topics.json')]

@@ -1,7 +1,7 @@
 import asyncio
 from slack_sdk.errors import SlackApiError
 from slack_sdk.web.async_client import AsyncWebClient
-from utils.abstract_db_writer import AbstractDbWriter
+from utils.abstractcontroller import AbstractController
 from utils.message_filters import message_contain_russian, translate_message
 
 
@@ -43,7 +43,7 @@ def translate_messages(messages: list):
 
 
 class DataCollector:
-    def __init__(self, db_writer: AbstractDbWriter):
+    def __init__(self, db_writer: AbstractController):
         self.db_writer = db_writer
         self.following_channel_ids = []  # Cached
         self.collecting_running = False
@@ -86,6 +86,9 @@ class DataCollector:
             state['following'] = state['id'] in channels
         self.db_writer.update_channels_states(current_states)
 
+    async def message_from_following_channel(self, message: dict) -> bool:
+        return message['channel'] in await self.get_following_channels_ids()
+
     async def get_following_channels_ids(self) -> list:
         result = self.following_channel_ids
         if not result:
@@ -96,7 +99,7 @@ class DataCollector:
         return result
 
     async def add_message(self, message):
-        if message['channel'] in await self.get_following_channels_ids():
+        if await self.message_from_following_channel(message):
             # TODO: maybe child messages contain 'thread_ts' too.
             if 'thread_ts' in message:
                 self.db_writer.add_child_messages([message], message['channel'], message['thread_ts'])
