@@ -22,7 +22,7 @@ def message_contain_russian(message):
 
 
 class Message:
-    def __init__(self, text: str, channel_id: str, ts: str, author_id):
+    def __init__(self, text: str, channel_id: str, ts: str, author_id: str):
         self.text = text
         self.author_id = author_id
         self.channel_id = channel_id
@@ -30,7 +30,7 @@ class Message:
 
     @classmethod
     def from_dict(cls, dict_data: dict):
-        channel_id = dict_data.get('channel_id', 'UNKNOWN')
+        channel_id = dict_data.get('channel', dict_data.get('channel_id')) # dict_data.get('channel_id', 'UNKNOWN')
         author_id = dict_data.get('user', dict_data.get('bot_id', 'UNKNOWN'))
         return cls(dict_data['text'], channel_id, dict_data['ts'], author_id)
 

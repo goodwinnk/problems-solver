@@ -62,6 +62,7 @@ class Model:
         self.entity_model = EntitySimilarityModel()
         self.classifier = DecisionTreeClassifier(min_samples_leaf=10)
         self.x, self.y = None, None
+        self.filepath = None
         # n_comp=250, min_samples=15, max_df 0.08 Pr: 69.6% Rc: 68.6%
         # n_comp=250, min_samples=15, max_df 0.08 Pr: 69.6% Rc: 68.6%
         # n_comp=250, min_samples=15, max_df 0.014 Pr: 63.8 % Rc: 73.5%
@@ -96,6 +97,12 @@ class Model:
         if plot:
             plot_features(x, y, show=True)
         return x, y
+
+    def update_model(self, message: Message):
+        self.text_model.update_model(message)
+        self.code_model.update_model(message)
+        self.entity_model.update_model(message)
+        logging.info('Model was updated')
 
     def test(self, messages_list: List[Message], dataset: List[List], do_train=True):
         if do_train:
@@ -134,7 +141,7 @@ class Model:
         positive_count = sum(self.y)
         coef_true = 1  # len(self.y) / (positive_count) if positive_count else 1
         weights = list(map(lambda s: coef_true if s else 1, self.y))
-        logging.info('Train classifier')
+        logging.info(f'Train classifier on {len(self.x)} samples')
         if len(self.x) <= 10 or positive_count in [0, len(self.x)]:
             self.classifier = DummyClassifier()
             logging.warning("DATASET IS EMPTY, SO CLASSIFIER IS NOT WORKING(always answer YES, its similar)")
@@ -219,9 +226,9 @@ def test_text_model():
     total, unknown_counter, has_counter = 0, 0, 0
     candidates = []
     for message in messages:
-        result, similarities = model.get_similar_messages(message)
+        result = model.get_similar_messages(message)
         total += len(result)
-        for sim_message in result:
+        for sim_message, similarity in result:
             if sim_message != message:
                 record = [sim_message.get_key(), message.get_key(), True]
                 if record not in positives:
@@ -242,7 +249,8 @@ def new_test():
     shuffle(dataset)
     model = Model()
     model.train(messages, dataset)
-    model.save_model('./models/C01CBLSMX0V')
+    model.test(messages, dataset, False)
+    # model.save_model('./models/C01CBLSMX0V')
     # model = Model.load_model('model')
     # text = "When I incrementally compile stdlib, I sometimes get an error `has several compatible actual declarations in modules &lt;kotlin-stdlib&gt;, &lt;kotlin-stdlib&gt;` on many actuals:\n<https://scans.gradle.com/s/nwmexsnqsykoe/console-log#L267>\nrestarting doesn't help, only clean helps"
     # res = model.get_similar_messages(Message(text, '', '', ''))
@@ -252,5 +260,5 @@ def new_test():
 
 
 if __name__ == '__main__':
-    new_test()
-    # test_text_model()
+    # new_test()
+    test_text_model()

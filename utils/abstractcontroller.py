@@ -25,6 +25,10 @@ class AbstractController(ABC):
         pass
 
     @abstractmethod
+    def remove_data(self, channel_id: str):
+        pass
+
+    @abstractmethod
     def add_child_messages(self, messages: list, channel_id: str, parent_ts: str):
         pass
 
@@ -37,5 +41,13 @@ class AbstractController(ABC):
         pass
 
     @abstractmethod
-    def get_dataset_messages(self, channel_id: str) -> list:
+    def add_dataset_messages(self, channel_id: str, msg_indetifier_pairs: list):
+        pass
+
+    @abstractmethod
+    def get_dataset_data(self, channel_id: str) -> list:
+        pass
+
+    @abstractmethod
+    def add_private_message(self, message, answer):
         pass
