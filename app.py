@@ -18,7 +18,7 @@ from utils.message_filters import *
 
 load_dotenv('secret.env')
 logging.basicConfig(level=logging.INFO)
-
+admin_id = os.environ.get('ADMIN_ID')
 controller = Controller(MongoClient().get_database('problems_solver'))
 
 model_manager = ModelManager(os.environ.get('MODEL_FOLDER'), controller)
@@ -36,7 +36,10 @@ app = AsyncApp(
 
 @app.event("app_home_opened")
 async def draw_home(client: AsyncWebClient, event, logger):
-    await client.views_publish(user_id=event['user'], view=await app_home.get_view(client, logger))
+    if event['user'] == admin_id:
+        await client.views_publish(user_id=event['user'], view=await app_home.get_admin_view(client, logger))
+    else:
+        await client.views_publish(user_id=event['user'], view=app_home.get_view())
 
 
 @app.action("collect-data")
@@ -46,44 +49,43 @@ async def button_clicked(ack, body, client, logger):
         logging.info('Start collecting messages')
         data_collector.collecting_running = True  # Do it before collecting because we need to draw new interface
         await client.views_update(view_id=body["view"]["id"], hash=body["view"]["hash"],
-                                  view=await app_home.get_view(client, logger))
+                                  view=await app_home.get_admin_view(client, logger))
         await data_collector.collect_messages(client, logger)  # A lot of time is wasted here
+    logging.info("Reloading models")
     model_manager.load_models(from_files=False)
-    await client.views_publish(user_id=body['user']['id'], view=await app_home.get_view(client, logger))
+    await client.views_publish(user_id=body['user']['id'], view=await app_home.get_admin_view(client, logger))
 
 
 def update_dataset(first_key: str, second_key: str, status: bool):
-    logging.info(f'Updating dataset:{first_key}-{second_key}: {status}')
+    logging.info(f'Try to update dataset:{first_key}-{second_key}: {status}')
     f_channel_id, s_channel_id = first_key.split('-')[0], second_key.split('-')[0]
     if f_channel_id == s_channel_id:
         controller.add_dataset_messages(channel_id=f_channel_id, msg_indetifier_pairs=[[first_key, second_key, status]])
         logging.info('Dataset was updated')
     else:
-        logging.warning('Review message pair from different channels!')
+        logging.warning('Review message pair from different channels! Dataset was not updated.')
 
 
 @app.action("review-positive")
 async def review_positive(ack, action):
-    await ack()
     logging.info('We have new POSITIVE review')
     first, second = action['value'].split('/')
     update_dataset(first, second, True)
+    await ack()
 
 
 @app.action("review-negative")
 async def review_negative(ack, action):
-    await ack()
     logging.info('We have new NEGATIVE review')
     first, second = action['value'].split('/')
     update_dataset(first, second, False)
+    await ack()
 
 
 @app.action("following-channel_chosen")
-async def choose_channel(ack, body, client, payload, logger):
-    await ack()
+async def choose_channel(ack, payload):
     await data_collector.set_channels(payload)
-    # await client.views_update(view_id=body["view"]["id"], hash=body["view"]["hash"],
-    #                           view=await app_home.get_view(client, logger))
+    await ack()
 
 
 async def answer_handler(client: AsyncWebClient, event, message):
@@ -105,26 +107,26 @@ async def answer_handler(client: AsyncWebClient, event, message):
 
 @app.message("")
 async def message_handler(client: AsyncWebClient, event, message, logger):
-    logger.info(message)
+    logging.info(message)
     if message_contain_russian(message):
-        logger.info('Message was ignored: contain russian')
+        logging.info('Message was ignored: contain russian')
         return
     await answer_handler(client, event, message)
 
 
 @app.event({"type": "message", "subtype": "file_share"})
-async def msg_deleted_handler(message, logger):
-    logger.info(message)
+async def msg_deleted_handler(message):
+    logging.info(message)
 
 
 @app.event({"type": "message", "subtype": "message_deleted"})
-async def msg_file_handler(message, logger):
-    logger.info(message)
+async def msg_file_handler(message):
+    logging.info(message)
 
 
 @app.event({"type": "message", "subtype": "message_changed"})
-async def msg_changed_handler(message, logger):
-    logger.info(message)
+async def msg_changed_handler(message):
+    logging.info(message)
 
 
 if __name__ == "__main__":

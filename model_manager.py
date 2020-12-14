@@ -24,16 +24,14 @@ class ModelManager:
         self.controller.update_channels_states(new_channel_state)
         self.controller.add_parent_messages(messages, channel_id)
         self.controller.add_dataset_messages(channel_id, dataset)
-        self.get_model(channel_id)
+        self.load_model(channel_id)
 
     def load_models(self, from_files=True):
         for channel in self.controller.get_channels_states().values():
             if channel['following']:
-                self.models_[channel['id']] = self.get_model(channel['id'], from_files)
+                self.models_[channel['id']] = self.load_model(channel['id'], load_from_file=from_files)
 
-    def get_model(self, channel_id: str, load_from_file=True, create=True) -> Model:
-        if channel_id in self.models_:
-            return self.models_[channel_id]
+    def load_model(self, channel_id: str, load_from_file=True, create=True):
         if load_from_file:
             try:
                 model = Model.load_model(f"{self.models_path}/{channel_id}")
@@ -48,6 +46,11 @@ class ModelManager:
             return self.models_[channel_id]
         logging.warning("Get model return untrained model.")
         return Model()
+
+    def get_model(self, channel_id: str) -> Model:
+        if channel_id in self.models_:
+            return self.models_[channel_id]
+        return self.load_model(channel_id)
 
     def create_model(self, channel_id: str) -> Model:
         logging.info(f'Creating new model for channel: {channel_id}')

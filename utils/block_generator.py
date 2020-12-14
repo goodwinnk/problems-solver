@@ -25,7 +25,14 @@ def get_channel_choosing_block(subscribed_channels: list, followed_channels: lis
             blocks[0]['accessory']['initial_options'].append(option)
     return blocks
 
-
+def header_block(text: str):
+    return  {
+        "type": "header",
+        "text": {
+            "type": "plain_text",
+            "text": text
+        }
+    }
 def text_block(text: str):
     return {
         "type": "section",
