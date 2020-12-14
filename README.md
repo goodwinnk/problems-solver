@@ -17,6 +17,8 @@ and place there following line without \<brackets\>
 SLACK_BOT_TOKEN=<paste your bot token>
 SLACK_SIGNING_TOKEN=<paste your signing token>
 GOOGLE_APPLICATION_CREDENTIALS=<paste your translator token>
+MODEL_FOLDER=<folder where bot will be store models>
+ADMIN_ID=<Admin member id in Slack (see "View profile" -> More(...))>
 ```
   
 **DO NOT ADD .env FILES TO YOUR GIT REPOSITORY**

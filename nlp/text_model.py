@@ -1,9 +1,11 @@
+from copy import deepcopy
 from typing import List
 
-import nltk
+import logging
 import numpy as np
 from nltk import PorterStemmer
 from nltk.corpus import stopwords
+from scipy.sparse import csr_matrix, vstack
 from sklearn.decomposition import TruncatedSVD
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -42,31 +44,52 @@ class TextSimilarityModel:
         return min(lens[0] / lens[1], lens[1] / lens[0]) if lens[0] and lens[1] else 0
 
     def train(self, messages_list: List[Message]):
-        self.messages_list = messages_list
+        self.messages_list = deepcopy(messages_list)
         normalized = self.normalize_data(messages_list)
-        tfidf_matrix = self.vectorizer.fit_transform(map(lambda x: ' '.join(x), normalized))
-        self.vector_matrix = self.svd.fit_transform(tfidf_matrix)
+        try:
+            tfidf_matrix = self.vectorizer.fit_transform(map(lambda x: ' '.join(x), normalized))
+            logging.info(f"Text model are training on {len(messages_list)} samples")
+            if tfidf_matrix.shape[1] <= self.svd.n_components:
+                self.svd.set_params(n_components=tfidf_matrix.shape[1] - 2)
+                logging.warning(f'Too little message for the SVD model, now n_components={tfidf_matrix.shape[1] - 2}')
+            self.vector_matrix = self.svd.fit_transform(tfidf_matrix)
+        except ValueError:
+            logging.info("WARNING NO MESSAGES, so text model is not working.")
+            self.vector_matrix = None
 
     def get_vector(self, message: Message):
-        normalized = ' '.join(self.normalize_data([message])[0])
-        vector = self.vectorizer.transform([normalized])
-        return self.svd.transform(vector)[0]
+        if self.vector_matrix is not None:
+            normalized = ' '.join(self.normalize_data([message])[0])
+            vector = self.vectorizer.transform([normalized])
+            return self.svd.transform(vector)[0]
+        logging.warning("No messages in text model, all vectors now are [0]")
+        return [0]
 
     def compare_messages(self, first: Message, second: Message):
         return cosine_similarity([self.get_vector(first)], [self.get_vector(second)])[0, 0]
 
     def find_similars(self, message: Message, count=5):
         vector = self.get_vector(message)
-        similarity = cosine_similarity([vector], self.vector_matrix)[0]
-        top_count_idx = np.argsort(similarity)[-count:]
-        return [(similarity[index], self.messages_list[index]) for index in reversed(top_count_idx)]
+        if self.vector_matrix is not None:
+            similarity = cosine_similarity([vector], self.vector_matrix)[0]
+            count = count if similarity.shape[0] >= count else similarity.shape[0]
+            top_count_idx = np.argsort(similarity)[-count:]
+            return [(similarity[index], self.messages_list[index]) for index in reversed(top_count_idx)]
+        return []
+
+    def update_model(self, message: Message):
+        vector = self.get_vector(message)
+        self.vector_matrix = vstack([self.vector_matrix, csr_matrix([vector])])
+        self.messages_list.append(message)
 
 
 def test_text_model():
     messages = [Message.from_dict(msg) for msg in read_data('data/processed/all_topics.json')]
     tsm = TextSimilarityModel(max_df=1.0)
     tsm.train(messages)
-
+    new_msg = Message('Test one two three hello, world', 'test', 'test', '')
+    tsm.update_model(new_msg)
+    print(tsm.find_similars(new_msg)[0][1])
 
 if __name__ == '__main__':
     test_text_model()
