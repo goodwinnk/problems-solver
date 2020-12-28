@@ -10,7 +10,7 @@ from slack_sdk.web.async_client import AsyncWebClient
 from data_collector import DataCollector
 from controller import Controller
 from app_home import AppHome
-from message_handler import send_answers
+from message_handler import send_answers, forward_btn_show
 from nlp.message_processing import Message
 
 from model_manager import ModelManager
@@ -19,6 +19,7 @@ from utils.message_filters import *
 load_dotenv('secret.env')
 logging.basicConfig(level=logging.INFO)
 admin_id = os.environ.get('ADMIN_ID')
+default_channel_id = os.environ.get('CHANNEL_ID')
 controller = Controller(MongoClient().get_database('problems_solver'))
 
 model_manager = ModelManager(os.environ.get('MODEL_FOLDER'), controller)
@@ -82,6 +83,19 @@ async def review_negative(ack, action):
     await ack()
 
 
+@app.action("forward-message")
+async def forward_message(ack, client, action):
+    logging.info('Forwarding message to main channel')
+    direct_id, msg_ts = action['value'].split('-')
+    msg = controller.get_private_message(direct_id, msg_ts)
+    if msg is not None:
+        text = msg['message']['text']
+        user = msg['message']['user']
+        text += f'\nAuthor: <@{user}>'
+        await client.chat_postMessage(channel=default_channel_id, link_names=True, text=text)
+    await ack()
+
+
 @app.action("following-channel_chosen")
 async def choose_channel(ack, payload):
     await data_collector.set_channels(payload)
@@ -93,8 +107,9 @@ async def answer_handler(client: AsyncWebClient, event, message):
     logging.info(f"Following channels: {await data_collector.get_following_channels_ids()}")
     if message.get('channel_type') == 'im':
         logging.info("'Im' message received")
-        model = model_manager.get_model('C01CBLSMX0V')  # default channel to answer
-        answers = await send_answers(client, model, event, message)
+        model = model_manager.get_model(default_channel_id)  # default channel to answer
+        answers, thread_ts = await send_answers(client, model, event, message)
+        await forward_btn_show(client, channel, message['ts'], thread_ts)
         await data_collector.add_private_message(message, answers)
     elif channel in await data_collector.get_following_channels_ids():
         logging.info('Message from following channel received')
@@ -115,18 +130,21 @@ async def message_handler(client: AsyncWebClient, event, message, logger):
 
 
 @app.event({"type": "message", "subtype": "file_share"})
-async def msg_deleted_handler(message):
-    logging.info(message)
+async def msg_deleted_handler():
+    pass
 
 
 @app.event({"type": "message", "subtype": "message_deleted"})
-async def msg_file_handler(message):
-    logging.info(message)
+async def msg_file_handler():
+    pass
 
 
 @app.event({"type": "message", "subtype": "message_changed"})
 async def msg_changed_handler(message):
-    logging.info(message)
+    if message.get('channel_type') == 'im':
+        logging.info('User change private message')
+        ts = message['previous_message']['ts']
+        controller.edit_private_message(message['channel'], ts, message['message'])
 
 
 if __name__ == "__main__":

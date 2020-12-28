@@ -33,7 +33,7 @@ def plot_field(start_x, end_x, start_y, end_y, x, y, classifier):
                 field_x.append(xx / 100)
                 field_y.append(yy / 100)
                 field_z.append(zz / 100)
-                field_c.append((0.1, 0.5, 0.1, 0) if classifier.predict([[field_x[-1], field_y[-1], field_z[-1]]]) \
+                field_c.append((0.1, 0.5, 0.1, 0.3) if classifier.predict([[field_x[-1], field_y[-1], field_z[-1]]]) \
                                    else 'r')
     ax.scatter(field_x, field_z, field_y, c=field_c)
     ax.set_xlabel('text similarity')
@@ -49,8 +49,7 @@ def plot_features(x, y, ax=None, show=False):
     if ax is None:
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
-    ax.set_facecolor('silver')
-    ax.scatter(xs[0], xs[2], xs[1], c=list(map(lambda decision: 'yellow' if decision else 'black', y)))
+    ax.scatter(xs[0], xs[2], xs[1], c=list(map(lambda decision: 'blue' if decision else 'black', y)))
     if show:
         plt.show()
 
@@ -229,7 +228,7 @@ def test_text_model():
         result = model.get_similar_messages(message)
         total += len(result)
         for sim_message, similarity in result:
-            if sim_message != message:
+            if sim_message.text != message.text:
                 record = [sim_message.get_key(), message.get_key(), True]
                 if record not in positives:
                     unknown_counter += 1
@@ -239,6 +238,8 @@ def test_text_model():
     json.dump(candidates, open('data/dataset/unknown.json', 'w'))
     print(f'Messages: ', len(messages), ', positive pairs:', len(positives))
     print(f'Found answers: ', total - len(messages))
+    print(f'In dataset: {has_counter}')
+    print(f'Unknown: {unknown_counter}')
     print(f'Precision', has_counter / (has_counter + unknown_counter))
     print(f'Recall: ', has_counter / len(positives))
 

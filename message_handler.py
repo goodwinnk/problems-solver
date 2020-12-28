@@ -8,6 +8,7 @@ from nlp.message_processing import Message
 from nlp.model import Model
 from nlp.question_detector import is_question
 from utils.message_filters import get_thread_ts
+from utils.block_generator import button_block
 
 template = {
     "blocks": [
@@ -34,7 +35,7 @@ template = {
 }
 
 
-async def send_answers(client: AsyncWebClient, model: Model, event: dict, message: dict) -> list:
+async def send_answers(client: AsyncWebClient, model: Model, event: dict, message: dict):
     answers = []
     channel, thread_ts = message['channel'], get_thread_ts(event)
     if is_question(message):
@@ -65,4 +66,9 @@ async def send_answers(client: AsyncWebClient, model: Model, event: dict, messag
         answers.append({'blocks': [], 'text': "Question is not detected. Try add '?'"})
         await client.chat_postMessage(channel=channel, thread_ts=thread_ts,
                                       text="Question is not detected. Try add '?'")
-    return answers
+    return answers, thread_ts
+
+
+async def forward_btn_show(client: AsyncWebClient, direct_id: str, msg_ts: str, thread_ts: str):
+    button = button_block("Forward message to channel", f"{direct_id}-{msg_ts}", "forward-message")
+    await client.chat_postMessage(channel=direct_id, thread_ts=thread_ts, blocks=[button])

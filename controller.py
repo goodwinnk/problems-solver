@@ -75,3 +75,13 @@ class Controller(AbstractController):
             except StopIteration:
                 pass
         return value
+
+    def get_private_message(self, direct_id: str, message_ts: str):
+        return self.db['private_messages'].find_one({"message.channel": direct_id, "message.ts": message_ts})
+
+    def edit_private_message(self, direct_id: str, message_ts: str, new_msg):
+        new_msg['ts'] = message_ts
+        new_msg['channel'] = direct_id
+        return self.db['private_messages'].find_one_and_update({"message.channel": direct_id, "message.ts": message_ts},
+                                                               {"$set": {"message": new_msg}})
+        # return self.db['private_messages'].find_one({"message.channel": direct_id, "message.ts": message_ts})
